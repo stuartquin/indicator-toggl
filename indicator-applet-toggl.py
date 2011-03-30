@@ -29,7 +29,7 @@ class TogglInterface():
         # This stuff needs read from config
         self.REFRESH_TIME    = 10
         self.TOTAL_DISPLAYED = 6
-        self.API_KEY         = "bda544447018531daffbcde2febbc90f"
+        self.API_KEY         = ""
 
 
     # Makes a request to Toggl API, retrives info and re-draws applet
