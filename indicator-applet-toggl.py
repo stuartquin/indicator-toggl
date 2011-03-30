@@ -26,6 +26,9 @@ class TogglInterface():
         self.taskList        = dict()
         self.activeTask      = None
 
+        # Used to calculate how many tabs are needed for each task
+        self.longest         = 0
+
         # This stuff needs read from config
         self.REFRESH_TIME    = 10
         self.TOTAL_DISPLAYED = 6
@@ -37,6 +40,7 @@ class TogglInterface():
     def update_task_info(self, ind):
 
         print "update_tasks +"
+        self.activeTask = None
 
         # Make Call to Server, 
         # @todo: Needs error checking
@@ -44,33 +48,52 @@ class TogglInterface():
         tasks = self.get_tasks()
         keys  = sorted(tasks)
 
-        menu      = gtk.Menu()
-        taskCount = 0
+        menu        = gtk.Menu()
+        taskCount   = 0
+        renderTasks = []
 
         # Loop through keys in reverse oreder
         for i in reversed(keys):
 
             task = tasks[i]
+            # Keep track of longest item
+            l = len(task.description)
+            if l > self.longest:
+                self.longest = l
 
             # Keep track of currently active task
             # Drops out of loop
             if task.active:
                 self.activeTask = task
-                self.render_active_task(menu)
-                continue
-
-            if taskCount == 0:
-                recentTitle = gtk.MenuItem("Recent Tasks \t (Click to continue)")
-                recentTitle.set_sensitive(False)
-                menu.append(recentTitle)
-
-            self.render_recent_task(menu, task)
+            else:
+                renderTasks.append(task)
 
             # Increase task count
             taskCount = taskCount+1
             if taskCount >= self.TOTAL_DISPLAYED:
                 break
 
+
+        if self.activeTask:
+            currentTitle = gtk.MenuItem("Current Task \t (Click to stop)")
+            currentTitle.set_sensitive(False)
+
+            # Add to menu
+            menu.append(currentTitle)
+            self.activeTask.render(menu, self.longest)
+            menu.append(gtk.SeparatorMenuItem())
+
+            # Add a title
+            recentTitle = gtk.MenuItem("Recent Tasks \t (Click to continue)")
+            recentTitle.set_sensitive(False)
+            menu.append(recentTitle)
+
+        # Render recent tasks
+        for task in renderTasks:
+            task.render(menu, self.longest)
+
+
+        # Draw options
         options = Options()
         options.render(menu)
 
@@ -80,43 +103,6 @@ class TogglInterface():
 
         glib.timeout_add_seconds(self.REFRESH_TIME, self.update_task_info, ind)
         print "update_tasks -"
-
-    def render_recent_task(self, menu, task):
-        print "render_recent_task +"
-
-        lText = task.description + ":\t" + task.get_time_str() + "\n" + task.project
-
-        # Create a new menu item
-        lItem = gtk.MenuItem(lText)
-
-        lItem.connect("activate", task.on_click, task)
-
-        # Add to menu
-        menu.append(lItem)
-
-        print "render_recent_task -"
-
-    # Renders the menu items for the currently active task
-    # Includes a menu seperator
-    #
-    def render_active_task(self, menu):
-        print "render_active_task +"
-        task = self.activeTask
-
-        lText = task.description + "  " + task.get_time_str() + "\n" + task.project 
-        # Create a new menu item
-        lItem = gtk.MenuItem(lText)
-        lItem.connect("activate", task.on_click, task)
-
-        currentTitle = gtk.MenuItem("Current Task \t (Click to stop)")
-        currentTitle.set_sensitive(False)
-
-        # Add to menu
-        menu.append(currentTitle)
-        menu.append(lItem)
-        menu.append(gtk.SeparatorMenuItem())
-
-        print "render_active_task -"
 
 
     # Makes HTTP request to server to fetch current and recent tasks
@@ -131,8 +117,7 @@ class TogglInterface():
         result   = response.read()
 
         output = json.loads( result )
-
-        tasks = output["data"]
+        tasks  = output["data"]
 
         for t in tasks:
             task = TogglTask()
@@ -158,8 +143,8 @@ class TogglTask:
         self.duration    = task["duration"]
 
         try:
-            proj = task["project"]
-            self.project     = proj["client_project_name"]
+            proj          = task["project"]
+            self.project  = proj["client_project_name"]
         except KeyError:
             print "No project for "+self.description
 
@@ -172,6 +157,39 @@ class TogglTask:
 
     def get_time_str(self):
         return time.strftime('%H:%M:%S', time.gmtime(self.duration) )
+
+    def render(self, menu, longest):
+
+        # Calculate how many tabs are required
+        spacing = self.get_tabs_str(longest)
+
+        # Create a new menu item
+        lText = self.description + spacing + self.get_time_str() + "\n" + self.project
+        lItem = gtk.MenuItem(lText)
+        lItem.connect("activate", self.on_click)
+        menu.add(lItem)
+
+
+    # Performs some crazy calculations to determine amount of tabs needed for
+    # perfect alignment
+    #
+    def get_tabs_str(self, longest):
+        dl    = len(self.description)
+        diff  = longest - dl
+
+        diff  = diff -(dl%4)
+
+        spacing   = "\t"
+        numSpaces = diff/4
+
+        if numSpaces == 0:
+            if diff%4 > 0:
+                numSpaces=1
+
+        for i in range(0,numSpaces):
+            spacing = spacing + "\t"
+
+        return spacing
 
 # Manages additional option shown at bottom of MenuItem
 #
