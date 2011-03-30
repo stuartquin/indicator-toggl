@@ -73,7 +73,7 @@ class TogglInterface():
         print "update_tasks -"
 
     def get_tasks(self):
-        base64string = base64.encodestring('%s:%s' % ("bda544447018531daffbcde2febbc90f","api_token"))[:-1]
+        base64string = base64.encodestring('%s:%s' % ("","api_token"))[:-1]
         req          = urllib2.Request("http://www.toggl.com/api/v3/tasks.json", None)
 
         req.add_header("Authorization", "Basic %s" % base64string)
