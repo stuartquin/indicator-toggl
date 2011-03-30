@@ -200,8 +200,5 @@ class Options:
         menu.append(pItem)
         menu.append(eItem)
 
-
-
-
 indicator = AppIndicator()
 gtk.main()
