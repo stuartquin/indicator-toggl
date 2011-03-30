@@ -1,1 +1,6 @@
 Work In Progress..
+
+Known Issues:
+ * Currently not packaged as an app, should be executed using 
+   python indicator-applet-toggl.py
+ * By default looks for the ToggleDesktop icon in /usr/share/pixmaps
