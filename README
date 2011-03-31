@@ -1,10 +1,14 @@
-Work In Progress..
+Displays current and recent tasks from www.toggl.com account
+
+Running:
+ * python indicator-applet-toggl.py <API_KEY>
 
 Todo:
   * Need configuration screens and files
   * Sort out tabbing of time stamps properly
+  * Add functionality for start/stop tasks
   * Notifications
 
 Known Issues:
- * Currently not packaged as an app, should be executed using 
+ * Currently not packaged as an app, should be executed using
    python indicator-applet-toggl.py
