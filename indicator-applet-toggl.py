@@ -7,12 +7,20 @@ import urllib2
 import base64
 import json
 import time
+import sys
+import pynotify
+
+class Config ():
+    
+    def __init__(self):
+        self.ICON = "distributor-logo"
+
 
 class AppIndicator (object):
 
     def __init__(self):
         self.ind = appindicator.Indicator("Toggl Indicator",
-            "TogglDesktop", appindicator.CATEGORY_COMMUNICATIONS)
+            config.ICON, appindicator.CATEGORY_COMMUNICATIONS)
         self.ind.set_status (appindicator.STATUS_ACTIVE)
 
         toggl = TogglInterface()
@@ -32,7 +40,10 @@ class TogglInterface():
         # This stuff needs read from config
         self.REFRESH_TIME    = 10
         self.TOTAL_DISPLAYED = 6
-        self.API_KEY         = ""
+        self.API_KEY         = sys.argv[1]
+
+        self.notify = NotificationHandler()
+
 
 
     # Makes a request to Toggl API, retrives info and re-draws applet
@@ -40,6 +51,7 @@ class TogglInterface():
     def update_task_info(self, ind):
 
         print "update_tasks +"
+        prevActiveTask  = self.activeTask
         self.activeTask = None
 
         # Make Call to Server, 
@@ -101,6 +113,9 @@ class TogglInterface():
         menu.show_all()
         ind.set_menu(menu)
 
+        # Pass to the NotificationHandler to decide wheter or not to show libnotify
+        self.notify.show_task(self.activeTask)
+
         glib.timeout_add_seconds(self.REFRESH_TIME, self.update_task_info, ind)
         print "update_tasks -"
 
@@ -137,6 +152,7 @@ class TogglTask:
         self.project     = ""
         self.duration    = -1
 
+
     def parse_task(self, task):
         self.description = task["description"]
         self.id          = task["id"]
@@ -146,7 +162,7 @@ class TogglTask:
             proj          = task["project"]
             self.project  = proj["client_project_name"]
         except KeyError:
-            print "No project for "+self.description
+            print "Warn: No project for "+self.description
 
         if self.duration < 0:
             self.duration = time.time() + task["duration"]
@@ -165,10 +181,12 @@ class TogglTask:
 
         # Create a new menu item
         lText = self.description + spacing + self.get_time_str() + "\n" + self.project
+
+        print lText + "|" + str(len(self.description))
+
         lItem = gtk.MenuItem(lText)
         lItem.connect("activate", self.on_click)
         menu.add(lItem)
-
 
     # Performs some crazy calculations to determine amount of tabs needed for
     # perfect alignment
@@ -177,17 +195,18 @@ class TogglTask:
         dl    = len(self.description)
         diff  = longest - dl
 
-        diff  = diff -(dl%4)
+        spacing="\t"
+        
+        if longest == dl:
+            return spacing
 
-        spacing   = "\t"
-        numSpaces = diff/4
+        moreSpace = True
+        while moreSpace==True:
+            spacing += "\t"
+            diff -= 4
 
-        if numSpaces == 0:
-            if diff%4 > 0:
-                numSpaces=1
-
-        for i in range(0,numSpaces):
-            spacing = spacing + "\t"
+            if diff < 4:
+                moreSpace = False
 
         return spacing
 
@@ -217,6 +236,45 @@ class Options:
         menu.append(gtk.SeparatorMenuItem())
         menu.append(pItem)
         menu.append(eItem)
+        
+class NotificationHandler:
 
+    def __init__(self):
+        self.prevId          = -1
+        self.prevTime        = 0
+        self.TIMEOUT         = 5
+        # Show a notification every 15 mins
+        self.NOTIFY_INTERVAL = 900
+
+        try:
+            if pynotify.init("Toggl Indicator App"):
+                self.isAvailable = True
+            else:
+                self.isAvailable = False
+                print "Error: There was a problem initializing the pynotify module"
+        except:
+                print "Error: You don't seem to have pynotify installed"
+
+    def show_message(self, title, message = ""):
+        if self.isAvailable:
+            n = pynotify.Notification(title, message, config.ICON)
+            n.set_timeout(self.TIMEOUT)
+            n.show()
+
+    def show_task(self, task):
+
+        if time.time() - self.prevTime > self.NOTIFY_INTERVAL:
+            self.prevId = -1
+
+        if task:
+            if self.prevId != task.id:
+                self.show_message(task.description + " ("+task.get_time_str()+")", task.project)
+                self.prevId   = task.id
+                self.prevTime = time.time()
+
+
+
+
+config    = Config()
 indicator = AppIndicator()
 gtk.main()
