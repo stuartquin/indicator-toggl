@@ -44,8 +44,6 @@ class TogglInterface():
 
         self.notify = NotificationHandler()
 
-
-
     # Makes a request to Toggl API, retrives info and re-draws applet
     #
     def update_task_info(self, ind):
@@ -151,16 +149,22 @@ class TogglTask:
         self.active      = False
         self.project     = ""
         self.duration    = -1
+        self.billable    = "false"
+        self.startTime   = ""
 
 
     def parse_task(self, task):
         self.description = task["description"]
         self.id          = task["id"]
         self.duration    = task["duration"]
+        self.billable    = task["billable"]
+        self.startTime   = task["start"]
+        self.project_id  = -1
 
         try:
-            proj          = task["project"]
-            self.project  = proj["client_project_name"]
+            proj            = task["project"]
+            self.project    = proj["client_project_name"]
+            self.project_id = proj["id"]
         except KeyError:
             print "Warn: No project for "+self.description
 
@@ -169,7 +173,27 @@ class TogglTask:
             self.active   = True
 
     def on_click(self, server,data=None):
-        print "Clicked Me!"+str(data)
+        if self.project_id > -1:
+            project = "\"project\":{\"id\":"+str(self.project_id)+"},"
+        else: 
+            project = ""
+
+        currentTime = time.strftime("%Y-%m-%dT%H:%M:%S+01:00", time.gmtime())
+
+        if self.billable:
+            billable = "true"
+        else:
+            billable = "false"
+
+
+        # Stop task
+        print "{\"task\":{\"billable\":"+billable+",\"description\":\""+self.description+"\",\"start\":\""+self.startTime+"\",\"duration\":"+str(self.duration)+"}}"
+        #"http://www.toggl.com/api/v3/tasks/"+self.id+".json"
+
+        # Create task
+        print "{\"task\":{\"billable\":"+billable+",\"description\":\""+self.description+"\","+project+"\"start\":\""+currentTime+"\", \"duration\":-1301472911,\"created_with\":\"Toggl Indicator\"}}"
+        # http://www.toggl.com/api/v3/tasks.json
+
 
     def get_time_str(self):
         return time.strftime('%H:%M:%S', time.gmtime(self.duration) )
