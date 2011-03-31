@@ -1,6 +1,10 @@
 Work In Progress..
 
+Todo:
+  * Need configuration screens and files
+  * Sort out tabbing of time stamps properly
+  * Notifications
+
 Known Issues:
  * Currently not packaged as an app, should be executed using 
    python indicator-applet-toggl.py
- * By default looks for the ToggleDesktop icon in /usr/share/pixmaps
