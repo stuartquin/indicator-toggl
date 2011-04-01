@@ -206,8 +206,6 @@ class TogglTask:
         # Create a new menu item
         lText = self.description + spacing + self.get_time_str() + "\n" + self.project
 
-        print lText + "|" + str(len(self.description))
-
         lItem = gtk.MenuItem(lText)
         lItem.connect("activate", self.on_click)
         menu.add(lItem)
