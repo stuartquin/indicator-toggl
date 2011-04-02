@@ -23,10 +23,6 @@ class AppIndicator (object):
             config.ICON, appindicator.CATEGORY_COMMUNICATIONS)
         self.ind.set_status (appindicator.STATUS_ACTIVE)
 
-        toggl = TogglInterface()
-        toggl.update_task_info(self.ind)
-
-
 
 class TogglInterface():
 
@@ -102,11 +98,9 @@ class TogglInterface():
         for task in renderTasks:
             task.render(menu, self.longest)
 
-
         # Draw options
         options = Options()
         options.render(menu)
-
 
         menu.show_all()
         ind.set_menu(menu)
@@ -232,6 +226,7 @@ class TogglTask:
 
         return spacing
 
+
 # Manages additional option shown at bottom of MenuItem
 #
 class Options:
@@ -244,8 +239,14 @@ class Options:
 
     def on_click_exit(self, server,data=None):
         print "exit"
+    
+    def on_click_create_task(self, server,data=None):
+        taskWindow = CreateTaskWindow()
 
     def render(self, menu):
+
+        cItem = gtk.MenuItem("Create Task")
+        cItem.connect("activate", self.on_click_create_task)
 
         pItem = gtk.MenuItem("Preferences")
         pItem.connect("activate", self.on_click_preferences)
@@ -256,6 +257,7 @@ class Options:
 
         # Add to menu
         menu.append(gtk.SeparatorMenuItem())
+        menu.append(cItem)
         menu.append(pItem)
         menu.append(eItem)
         
@@ -295,8 +297,48 @@ class NotificationHandler:
                 self.prevTime = time.time()
 
 
+class CreateTaskWindow:
+
+    def __init__(self):
+        try:
+            import pygtk
+            pygtk.require("2.0")
+        except:
+            print "FAILS"
+            pass
+            
+        try:
+            import gtk
+            import gtk.glade
+        except:
+            sys.exit(1)
+
+        self.widgetTree = gtk.glade.XML("CreateTask.glade")
+        
+        dic = { 
+            "on_click_create_btn" : self.on_click_create_btn,
+            "on_click_cancel_btn" : self.on_click_cancel_btn
+        }
+
+        self.widgetTree.signal_autoconnect( dic )
+
+    def on_click_cancel_btn(self, widget):
+        window = self.widgetTree.get_widget("mainWindow")
+        window.destroy()
+
+    def on_click_create_btn(self, widget):
+        taskField = self.widgetTree.get_widget("taskField")
+        print taskField.get_text()
+
+
+
+
 
 
 config    = Config()
 indicator = AppIndicator()
+toggl     = TogglInterface()
+
+# Kicks off the application
+toggl.update_task_info(indicator.ind)
 gtk.main()
