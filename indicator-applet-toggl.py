@@ -22,12 +22,19 @@ class AppIndicator (object):
         self.ind = appindicator.Indicator("Toggl Indicator",
             config.ICON, appindicator.CATEGORY_COMMUNICATIONS)
         self.ind.set_status (appindicator.STATUS_ACTIVE)
+        
+        menu        = gtk.Menu()
+        menu.add(gtk.MenuItem("Loading..."))
+        menu.show_all()
+        self.ind.set_menu(menu)
 
 
 class TogglInterface():
 
     def __init__(self):
         self.taskList        = dict()
+        self.projectList     = None
+        self.clientList      = None
         self.activeTask      = None
 
         # Used to calculate how many tabs are needed for each task
@@ -37,8 +44,18 @@ class TogglInterface():
         self.REFRESH_TIME    = 10
         self.TOTAL_DISPLAYED = 6
         self.API_KEY         = sys.argv[1]
+        
+        # Only update the list of projects every minute
+        self.PROJECT_REFRESH = 60
 
         self.notify = NotificationHandler()
+
+        # Kicks off the application
+        glib.timeout_add_seconds(1, self.update_task_info, indicator.ind)
+
+        # Don't get list of projects immediatley, allows the app to start quicker
+        glib.timeout_add_seconds(2, self.get_projects)
+        glib.timeout_add_seconds(2, self.get_clients)
 
     # Makes a request to Toggl API, retrives info and re-draws applet
     #
@@ -79,7 +96,7 @@ class TogglInterface():
             if taskCount >= self.TOTAL_DISPLAYED:
                 break
 
-
+        # Show currently active task
         if self.activeTask:
             currentTitle = gtk.MenuItem("Current Task \t (Click to stop)")
             currentTitle.set_sensitive(False)
@@ -89,10 +106,10 @@ class TogglInterface():
             self.activeTask.render(menu, self.longest)
             menu.append(gtk.SeparatorMenuItem())
 
-            # Add a title
-            recentTitle = gtk.MenuItem("Recent Tasks \t (Click to continue)")
-            recentTitle.set_sensitive(False)
-            menu.append(recentTitle)
+        # Add a title
+        recentTitle = gtk.MenuItem("Recent Tasks \t (Click to continue)")
+        recentTitle.set_sensitive(False)
+        menu.append(recentTitle)
 
         # Render recent tasks
         for task in renderTasks:
@@ -110,8 +127,60 @@ class TogglInterface():
 
         glib.timeout_add_seconds(self.REFRESH_TIME, self.update_task_info, ind)
         print "update_tasks -"
+        
 
+    # Fetches a list of projects from toggl
+    #
+    def get_projects(self):
+        print "get_projects +"
 
+        self.projectList = dict()
+
+        base64string = base64.encodestring('%s:%s' % (self.API_KEY,"api_token"))[:-1]
+        req          = urllib2.Request("http://www.toggl.com/api/v3/projects.json", None)
+
+        req.add_header("Authorization", "Basic %s" % base64string)
+        response = urllib2.urlopen(req)
+        result   = response.read()
+
+        output    = json.loads( result )
+        projects  = output["data"]
+
+        for p in projects:
+            project = TogglProject()
+            project.parse_project(p)
+            self.projectList[p["name"]] = project
+
+        glib.timeout_add_seconds(self.PROJECT_REFRESH, self.get_projects)
+
+        print "get_projects -"
+
+    # Fetches a list of clients from toggl
+    #
+    def get_clients(self):
+        print "get_clients +"
+
+        self.clientList = dict()
+
+        base64string = base64.encodestring('%s:%s' % (self.API_KEY,"api_token"))[:-1]
+        req          = urllib2.Request("http://www.toggl.com/api/v3/clients.json", None)
+
+        req.add_header("Authorization", "Basic %s" % base64string)
+        response = urllib2.urlopen(req)
+        result   = response.read()
+
+        output    = json.loads( result )
+        clients  = output["data"]
+
+        for c in clients:
+            client = ToggleClient()
+            client.parse_client(c)
+            self.clientList[c["name"]] = client
+
+        glib.timeout_add_seconds(self.PROJECT_REFRESH, self.get_clients)
+
+        print "get_clients -"
+        
     # Makes HTTP request to server to fetch current and recent tasks
     # Need some way of optimising this, shouldnt create TogglTask for every entry
     #
@@ -133,6 +202,32 @@ class TogglInterface():
 
         return self.taskList
 
+
+# Object representations of projects and clientsCombo
+#
+class TogglProject:
+
+    def __init__(self):
+        self.client_project_name = ""
+        self.billable = "false"
+        self.id = -1
+    
+    def parse_project(self, project):
+        self.client_project_name = project["client_project_name"]
+        self.id                  = project["id"]
+        self.billable            = project["billable"]
+        
+class ToggleClient:
+
+    def __init__(self):
+        self.name = ""
+        self.id = -1
+    
+    def parse_client(self, client):
+        self.name = client["name"]
+        self.id   = client["id"]
+
+
 # Created for every toggl task
 #
 class TogglTask:
@@ -145,7 +240,6 @@ class TogglTask:
         self.duration    = -1
         self.billable    = "false"
         self.startTime   = ""
-
 
     def parse_task(self, task):
         self.description = task["description"]
@@ -297,6 +391,8 @@ class NotificationHandler:
                 self.prevTime = time.time()
 
 
+# GUI window that allows user to Create a new task, includes project and client selection
+#
 class CreateTaskWindow:
 
     def __init__(self):
@@ -321,6 +417,39 @@ class CreateTaskWindow:
         }
 
         self.widgetTree.signal_autoconnect( dic )
+        
+        self.set_project_combo()
+        self.set_client_combo()
+
+    def set_project_combo(self):
+        if toggl.projectList == None:
+            toggl.get_projects()
+            
+            
+        projectCombo = self.widgetTree.get_widget("projectsCombo")
+        projects     = toggl.projectList
+        keys         = sorted(projects)
+
+        # Loop through keys in reverse oreder
+        for i in keys:
+            projectCombo.append_text(i)
+            
+        projectCombo.set_active(0)
+
+    def set_client_combo(self):
+        if toggl.clientList == None:
+            toggl.get_clients()
+            
+            
+        clientCombo = self.widgetTree.get_widget("clientsCombo")
+        clients     = toggl.clientList
+        keys         = sorted(clients)
+
+        # Loop through keys in reverse oreder
+        for i in keys:
+            clientCombo.append_text(i)
+            
+        clientCombo.set_active(0)
 
     def on_click_cancel_btn(self, widget):
         window = self.widgetTree.get_widget("mainWindow")
@@ -330,15 +459,9 @@ class CreateTaskWindow:
         taskField = self.widgetTree.get_widget("taskField")
         print taskField.get_text()
 
-
-
-
-
-
 config    = Config()
 indicator = AppIndicator()
 toggl     = TogglInterface()
 
-# Kicks off the application
-toggl.update_task_info(indicator.ind)
+
 gtk.main()
