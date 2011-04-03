@@ -6,6 +6,7 @@ import appindicator
 import urllib2
 import base64
 import json
+import simplejson
 import time
 import sys
 import pynotify
@@ -55,7 +56,6 @@ class TogglInterface():
 
         # Don't get list of projects immediatley, allows the app to start quicker
         glib.timeout_add_seconds(2, self.get_projects)
-        glib.timeout_add_seconds(2, self.get_clients)
 
     # Makes a request to Toggl API, retrives info and re-draws applet
     #
@@ -127,7 +127,55 @@ class TogglInterface():
 
         glib.timeout_add_seconds(self.REFRESH_TIME, self.update_task_info, ind)
         print "update_tasks -"
-        
+    
+    # Makes a request to the supplied URL
+    # sets authorisation headers and returns the contents of "data" element in response
+    #
+    def make_request(self, url, data = None):
+
+        base64string = base64.encodestring('%s:%s' % (self.API_KEY,"api_token")).strip()
+        req          = urllib2.Request(url)
+        req.add_header("Authorization", "Basic %s" % base64string)
+
+        if data != None:
+            req.add_header("Content-Type","application/json")
+            req.add_data(data)
+
+        print "make_request + URL: "+url+", DATA:"+str(data)
+
+        response = urllib2.urlopen(req)
+        result   = response.read()
+
+        output    = json.loads( result )
+        return output["data"]
+
+    # Creates a task, arguments can either be an existing task object or
+    # string definition of a new task including project and client
+    #
+    def create_task(self, task, proj=None):
+
+        project  = ""
+        billable = "false"
+
+        if isinstance(task, TogglTask):
+            if task.billable:
+                billable = "true"
+
+            description = task.description
+
+            if task.project_id > -1:
+                project = "\"project\":{\"id\":"+str(task.project_id)+"},"
+        else:
+            if proj != "None":
+                project = "\"project\":{\"id\":"+str(self.projectList[proj].id)+"},"
+            description = task
+
+        currentTime = time
+        duration    = str(int(currentTime.time()))
+        startTime   = time.strftime("%Y-%m-%dT%H:%M:%S+01:00", currentTime.gmtime())
+
+        self.make_request("http://www.toggl.com/api/v3/tasks.json", "{\"task\":{\"billable\":"+billable+",\"description\":\""+description+"\","+project+"\"start\":\""+startTime+"\", \"duration\":-"+duration+",\"created_with\":\"Toggl Indicator\"}}")
+        # http://www.toggl.com/api/v3/tasks.json
 
     # Fetches a list of projects from toggl
     #
@@ -135,65 +183,23 @@ class TogglInterface():
         print "get_projects +"
 
         self.projectList = dict()
-
-        base64string = base64.encodestring('%s:%s' % (self.API_KEY,"api_token"))[:-1]
-        req          = urllib2.Request("http://www.toggl.com/api/v3/projects.json", None)
-
-        req.add_header("Authorization", "Basic %s" % base64string)
-        response = urllib2.urlopen(req)
-        result   = response.read()
-
-        output    = json.loads( result )
-        projects  = output["data"]
+        projects  = self.make_request("http://www.toggl.com/api/v3/projects.json", None)
 
         for p in projects:
             project = TogglProject()
             project.parse_project(p)
-            self.projectList[p["name"]] = project
+            self.projectList[p["client_project_name"]] = project
 
         glib.timeout_add_seconds(self.PROJECT_REFRESH, self.get_projects)
 
         print "get_projects -"
 
-    # Fetches a list of clients from toggl
-    #
-    def get_clients(self):
-        print "get_clients +"
-
-        self.clientList = dict()
-
-        base64string = base64.encodestring('%s:%s' % (self.API_KEY,"api_token"))[:-1]
-        req          = urllib2.Request("http://www.toggl.com/api/v3/clients.json", None)
-
-        req.add_header("Authorization", "Basic %s" % base64string)
-        response = urllib2.urlopen(req)
-        result   = response.read()
-
-        output    = json.loads( result )
-        clients  = output["data"]
-
-        for c in clients:
-            client = ToggleClient()
-            client.parse_client(c)
-            self.clientList[c["name"]] = client
-
-        glib.timeout_add_seconds(self.PROJECT_REFRESH, self.get_clients)
-
-        print "get_clients -"
-        
     # Makes HTTP request to server to fetch current and recent tasks
     # Need some way of optimising this, shouldnt create TogglTask for every entry
     #
     def get_tasks(self):
-        base64string = base64.encodestring('%s:%s' % (self.API_KEY,"api_token"))[:-1]
-        req          = urllib2.Request("http://www.toggl.com/api/v3/tasks.json", None)
 
-        req.add_header("Authorization", "Basic %s" % base64string)
-        response = urllib2.urlopen(req)
-        result   = response.read()
-
-        output = json.loads( result )
-        tasks  = output["data"]
+        tasks  = self.make_request("http://www.toggl.com/api/v3/tasks.json", None)
 
         for t in tasks:
             task = TogglTask()
@@ -216,16 +222,6 @@ class TogglProject:
         self.client_project_name = project["client_project_name"]
         self.id                  = project["id"]
         self.billable            = project["billable"]
-        
-class ToggleClient:
-
-    def __init__(self):
-        self.name = ""
-        self.id = -1
-    
-    def parse_client(self, client):
-        self.name = client["name"]
-        self.id   = client["id"]
 
 
 # Created for every toggl task
@@ -266,22 +262,9 @@ class TogglTask:
         else: 
             project = ""
 
-        currentTime = time.strftime("%Y-%m-%dT%H:%M:%S+01:00", time.gmtime())
-
-        if self.billable:
-            billable = "true"
-        else:
-            billable = "false"
-
-
         # Stop task
         print "{\"task\":{\"billable\":"+billable+",\"description\":\""+self.description+"\",\"start\":\""+self.startTime+"\",\"duration\":"+str(self.duration)+"}}"
         #"http://www.toggl.com/api/v3/tasks/"+self.id+".json"
-
-        # Create task
-        print "{\"task\":{\"billable\":"+billable+",\"description\":\""+self.description+"\","+project+"\"start\":\""+currentTime+"\", \"duration\":-1301472911,\"created_with\":\"Toggl Indicator\"}}"
-        # http://www.toggl.com/api/v3/tasks.json
-
 
     def get_time_str(self):
         return time.strftime('%H:%M:%S', time.gmtime(self.duration) )
@@ -410,7 +393,8 @@ class CreateTaskWindow:
             sys.exit(1)
 
         self.widgetTree = gtk.glade.XML("CreateTask.glade")
-        
+        window = self.widgetTree.get_widget("mainWindow")
+
         dic = { 
             "on_click_create_btn" : self.on_click_create_btn,
             "on_click_cancel_btn" : self.on_click_cancel_btn
@@ -419,7 +403,6 @@ class CreateTaskWindow:
         self.widgetTree.signal_autoconnect( dic )
         
         self.set_project_combo()
-        self.set_client_combo()
 
     def set_project_combo(self):
         if toggl.projectList == None:
@@ -434,34 +417,24 @@ class CreateTaskWindow:
         for i in keys:
             projectCombo.append_text(i)
             
-        projectCombo.set_active(0)
-
-    def set_client_combo(self):
-        if toggl.clientList == None:
-            toggl.get_clients()
-            
-            
-        clientCombo = self.widgetTree.get_widget("clientsCombo")
-        clients     = toggl.clientList
-        keys         = sorted(clients)
-
-        # Loop through keys in reverse oreder
-        for i in keys:
-            clientCombo.append_text(i)
-            
-        clientCombo.set_active(0)
+        projectCombo.set_active(2)
 
     def on_click_cancel_btn(self, widget):
-        window = self.widgetTree.get_widget("mainWindow")
-        window.destroy()
+        self.window.destroy()
 
     def on_click_create_btn(self, widget):
-        taskField = self.widgetTree.get_widget("taskField")
-        print taskField.get_text()
+        taskField    = self.widgetTree.get_widget("taskField")
+        projectCombo = self.widgetTree.get_widget("projectsCombo")
+
+        toggl.create_task(taskField.get_text(),projectCombo.get_active_text())
+        
+        self.window.destroy()
 
 config    = Config()
 indicator = AppIndicator()
 toggl     = TogglInterface()
 
+# DEBUG
+taskWindow = CreateTaskWindow()
 
 gtk.main()

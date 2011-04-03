@@ -1,13 +1,19 @@
+Ubuntu indicator applet for toggl web app
 Displays current and recent tasks from www.toggl.com account
 
+Features:
+ * Display active and recent tasks
+ * Create new tasks 
+ * Notification reminder of currently active task
+
 Running:
+ * get API_KEY from Settings -> My Account section of toggle webapp
  * python indicator-applet-toggl.py <API_KEY>
 
 Todo:
   * Need configuration screens and files
-  * Sort out tabbing of time stamps properly
   * Add functionality for start/stop tasks
-  * Notifications
+	+ Clicking Active item should stop it
 
 Known Issues:
  * Currently not packaged as an app, should be executed using
