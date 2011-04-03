@@ -12,9 +12,18 @@ import sys
 import pynotify
 
 class Config ():
-    
+
     def __init__(self):
         self.ICON = "distributor-logo"
+        if len(sys.argv) > 2:
+            self.DEBUG = True
+        else:
+            self.DEBUG = False
+
+    def debug(self, msg):
+        if self.DEBUG:
+            print msg
+
 
 
 class AppIndicator (object):
@@ -61,7 +70,7 @@ class TogglInterface():
     #
     def update_task_info(self, ind, doTimeout = True):
 
-        print "update_tasks +"
+        config.debug( "update_tasks +" )
         prevActiveTask  = self.activeTask
         self.activeTask = None
 
@@ -127,7 +136,8 @@ class TogglInterface():
 
         if doTimeout:
             glib.timeout_add_seconds(self.REFRESH_TIME, self.update_task_info, ind)
-        print "update_tasks -"
+
+        config.debug("update_tasks -")
     
     # Makes a request to the supplied URL
     # sets authorisation headers and returns the contents of "data" element in response
@@ -145,7 +155,7 @@ class TogglInterface():
         if req_method != None:
             req.get_method = lambda: req_method
 
-        print "make_request + URL: "+url+", DATA:"+str(data)
+        config.debug("make_request + URL: "+url+", DATA:"+str(data))
 
         response = urllib2.urlopen(req)
         result   = response.read()
@@ -202,7 +212,7 @@ class TogglInterface():
     # Fetches a list of projects from toggl
     #
     def get_projects(self):
-        print "get_projects +"
+        config.debug("get_projects +")
 
         self.projectList = dict()
         projects  = self.make_request("http://www.toggl.com/api/v3/projects.json", None)
@@ -214,7 +224,7 @@ class TogglInterface():
 
         glib.timeout_add_seconds(self.PROJECT_REFRESH, self.get_projects)
 
-        print "get_projects -"
+        config.debug("get_projects -")
 
     # Makes HTTP request to server to fetch current and recent tasks
     # Need some way of optimising this, shouldnt create TogglTask for every entry
@@ -272,7 +282,7 @@ class TogglTask:
             self.project    = proj["client_project_name"]
             self.project_id = proj["id"]
         except KeyError:
-            print "Warn: No project for "+self.description
+            config.debug("Warn: No project for "+self.description)
 
         if self.duration < 0:
             self.duration = time.time() + task["duration"]
@@ -313,15 +323,18 @@ class TogglTask:
         spacing="\t"
         
         if longest == dl:
+            config.debug(self.description + ":" + spacing + ":" + str(dl) + ":" + str(longest))
             return spacing
 
         moreSpace = True
         while moreSpace==True:
             spacing += "\t"
-            diff -= 4
+            diff    -= 4
 
-            if diff < 4:
+            if diff <= 1:
                 moreSpace = False
+
+        config.debug(self.description + ":" + spacing + ":" + str(dl) + ":" + str(longest))
 
         return spacing
 
@@ -331,13 +344,17 @@ class TogglTask:
 class Options:
 
     def __init__(self):
-        print "Init Options"
+        config.debug("Init Options")
+        
+    def on_click_open_toggl(self, server, data=None):
+        import webbrowser
+        webbrowser.open("https://www.toggl.com/tasks")
 
     def on_click_preferences(self, server,data=None):
         print "Options"
 
     def on_click_exit(self, server,data=None):
-        print "exit"
+        sys.exit(1)
     
     def on_click_create_task(self, server,data=None):
         taskWindow = CreateTaskWindow()
@@ -346,6 +363,9 @@ class Options:
 
         cItem = gtk.MenuItem("Create Task")
         cItem.connect("activate", self.on_click_create_task)
+        
+        tItem = gtk.MenuItem("Open Toggl")
+        tItem.connect("activate", self.on_click_open_toggl)
 
         pItem = gtk.MenuItem("Preferences")
         pItem.connect("activate", self.on_click_preferences)
@@ -357,6 +377,9 @@ class Options:
         # Add to menu
         menu.append(gtk.SeparatorMenuItem())
         menu.append(cItem)
+        menu.append(tItem)
+    
+        menu.append(gtk.SeparatorMenuItem())
         menu.append(pItem)
         menu.append(eItem)
         
@@ -365,7 +388,7 @@ class NotificationHandler:
     def __init__(self):
         self.prevId          = -1
         self.prevTime        = 0
-        self.TIMEOUT         = 5
+        self.TIMEOUT         = 3
         # Show a notification every 15 mins
         self.NOTIFY_INTERVAL = 900
 
