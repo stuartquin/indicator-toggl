@@ -59,7 +59,7 @@ class TogglInterface():
 
     # Makes a request to Toggl API, retrives info and re-draws applet
     #
-    def update_task_info(self, ind):
+    def update_task_info(self, ind, doTimeout = True):
 
         print "update_tasks +"
         prevActiveTask  = self.activeTask
@@ -125,13 +125,14 @@ class TogglInterface():
         # Pass to the NotificationHandler to decide wheter or not to show libnotify
         self.notify.show_task(self.activeTask)
 
-        glib.timeout_add_seconds(self.REFRESH_TIME, self.update_task_info, ind)
+        if doTimeout:
+            glib.timeout_add_seconds(self.REFRESH_TIME, self.update_task_info, ind)
         print "update_tasks -"
     
     # Makes a request to the supplied URL
     # sets authorisation headers and returns the contents of "data" element in response
     #
-    def make_request(self, url, data = None):
+    def make_request(self, url, data = None, req_method = None):
 
         base64string = base64.encodestring('%s:%s' % (self.API_KEY,"api_token")).strip()
         req          = urllib2.Request(url)
@@ -140,6 +141,9 @@ class TogglInterface():
         if data != None:
             req.add_header("Content-Type","application/json")
             req.add_data(data)
+        
+        if req_method != None:
+            req.get_method = lambda: req_method
 
         print "make_request + URL: "+url+", DATA:"+str(data)
 
@@ -175,7 +179,25 @@ class TogglInterface():
         startTime   = time.strftime("%Y-%m-%dT%H:%M:%S+01:00", currentTime.gmtime())
 
         self.make_request("http://www.toggl.com/api/v3/tasks.json", "{\"task\":{\"billable\":"+billable+",\"description\":\""+description+"\","+project+"\"start\":\""+startTime+"\", \"duration\":-"+duration+",\"created_with\":\"Toggl Indicator\"}}")
-        # http://www.toggl.com/api/v3/tasks.json
+
+        self.update_task_info(indicator.ind, False)
+
+    # Stops a currently running
+    #
+    def stop_task(self, task):
+
+        project  = ""
+        billable = "false"
+    
+        if task.billable:
+            billable = "true"
+
+        self.make_request("http://www.toggl.com/api/v3/tasks/"+str(task.id)+".json", "{\"task\":{\"billable\":"+billable+",\"description\":\""+task.description+"\",\"start\":\""+task.startTime+"\",\"duration\":"+str(int(task.duration))+"}}", "PUT")
+
+        self.update_task_info(indicator.ind, False)
+
+
+
 
     # Fetches a list of projects from toggl
     #
@@ -257,14 +279,14 @@ class TogglTask:
             self.active   = True
 
     def on_click(self, server,data=None):
-        if self.project_id > -1:
-            project = "\"project\":{\"id\":"+str(self.project_id)+"},"
-        else: 
-            project = ""
 
         # Stop task
-        print "{\"task\":{\"billable\":"+billable+",\"description\":\""+self.description+"\",\"start\":\""+self.startTime+"\",\"duration\":"+str(self.duration)+"}}"
-        #"http://www.toggl.com/api/v3/tasks/"+self.id+".json"
+        if self.active:
+            toggl.stop_task(self)
+        else:
+            # Create a new copy of this task, making it active
+            toggl.create_task(self)
+       
 
     def get_time_str(self):
         return time.strftime('%H:%M:%S', time.gmtime(self.duration) )
@@ -393,7 +415,7 @@ class CreateTaskWindow:
             sys.exit(1)
 
         self.widgetTree = gtk.glade.XML("CreateTask.glade")
-        window = self.widgetTree.get_widget("mainWindow")
+        self.window     = self.widgetTree.get_widget("mainWindow")
 
         dic = { 
             "on_click_create_btn" : self.on_click_create_btn,
@@ -433,8 +455,5 @@ class CreateTaskWindow:
 config    = Config()
 indicator = AppIndicator()
 toggl     = TogglInterface()
-
-# DEBUG
-taskWindow = CreateTaskWindow()
 
 gtk.main()
