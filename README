@@ -3,6 +3,7 @@ Displays current and recent tasks from www.toggl.com account
 
 Features:
  * Display active and recent tasks
+ * Click to start and stop tasks
  * Create new tasks 
  * Notification reminder of currently active task
 
@@ -11,9 +12,9 @@ Running:
  * python indicator-applet-toggl.py <API_KEY>
 
 Todo:
-  * Need configuration screens and files
-  * Add functionality for start/stop tasks
-	+ Clicking Active item should stop it
+  * Need configuration screens and files 
+  * Support for tags in Create Task screen
+  * Sort out custom icon and setup process
 
 Known Issues:
  * Currently not packaged as an app, should be executed using
